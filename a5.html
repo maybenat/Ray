@@ -1,0 +1,604 @@
+<!-- Natalie McMullen -->
+<!-- HW5 -->
+<!-- All of the needed code is contained in this file -->
+<!-- The javascript below contains all my code for the Ray tracer -->
+
+<img id='render' />
+<script type='text/javascript'>
+function render() {
+    var canv = document.createElement("canvas");
+    canv.width = 512;
+    canv.height = 512;
+    document.body.appendChild(canv);
+    var ctx = canv.getContext("2d");
+    var rayTracer = new RayTracer();
+
+    //This is used for contruction of my box
+    var corner1 = new Vector(0.75, 0.75, 0.75);
+    var corner2 = new Vector(-0.75, -0.75, -0.75);
+
+    var c1x = corner1.x;
+    var c1y = corner1.y;
+    var c1z = corner1.z;
+
+    var c2x = corner2.x
+    var c2y = corner2.y;
+    var c2z = corner2.z;
+
+    var A = new Vector(c2x, c1y, c1z);
+    var B = new Vector(c2x, c1y, c2z);
+    var C = new Vector(c1x, c1y, c2z);
+
+    var D = new Vector(c2x, c2y, c1z);
+    var E = new Vector(c1x, c2y, c1z);
+    var F = new Vector(c1x, c2y, c2z);
+
+    var scene = {
+        //THIS IS WHERE YOU CAN MOVE THE CAMERA!!
+        camera: new Camera(new Vector(14.0, 4.0, 3.0), new Vector(-0.5, 0.5, 0.0)),
+
+        shapes: [
+            //The Floor
+            new Polygon(new Vector(0.0, 1.0, 0.0), 0.0, Surface.checkerboard),
+            //Snowman
+            new Sphere(new Vector(3.0, 1.0, -1.5), 1.0, Surface.white),
+            new Sphere(new Vector(3.0, 2.0, -1.5), 0.75, Surface.middle),
+            new Sphere(new Vector(3.0, 3.0, -1.5), 0.5, Surface.head),
+            new Sphere(new Vector(-0.5, 3.75, 2.0), 2.2, Surface.extrashiny),
+
+            //Square
+            new Triangle(D, A, corner1, Surface.cubey),
+            new Triangle(corner1, E, D, Surface.cubey),
+            new Triangle(corner2, B, A, Surface.cubey),
+            new Triangle(A, D, corner2, Surface.cubey),
+            new Triangle(F, C, B, Surface.cubey),
+            new Triangle(B, corner2, F, Surface.cubey),
+            new Triangle2(B, corner2, F, Surface.cubey),
+            new Triangle2(E, corner1, C, Surface.cubey),
+            new Triangle2(E, corner1, C, Surface.cubey),
+            new Triangle2(C, F, E, Surface.cubey),
+            new Triangle2(D, E, F, Surface.cubey),
+            new Triangle2(F, corner2, D, Surface.cubey),
+            new Triangle2(corner1, A, B, Surface.cubey),
+            new Triangle2(B, C, corner1, Surface.cubey),
+        ],
+
+        light: [{
+            pos: new Vector(10, 10, 10),
+            color: new Color(1, 1, 1)
+        }, ],
+    };
+    return rayTracer.render(scene, ctx);
+}
+
+
+var Camera = (function() {
+    function Camera(pos, lookAt) {
+        var downCoodirections = new Vector(0.0, -1.5, 0.0);
+        this.pos = pos;
+        //Normalize 
+        var interm = Vector.minus(lookAt, this.pos);
+        this.forwadirection = Vector.norm(interm);
+        var rightCross = Vector.norm(Vector.cross(this.forwadirection, downCoodirections));
+        this.right = Vector.multiply(1.5, rightCross);
+        var upCross = Vector.norm(Vector.cross(this.forwadirection, this.right));
+        this.up = Vector.multiply(1.5, upCross);
+    }
+    return Camera;
+})();
+
+var Sphere = (function() {
+    function Sphere(center, radius, surface) {
+        this.center = center;
+        this.surface = surface;
+        this.diameter = radius * radius;
+
+        this.normal = function(pos) {
+            //Calc Normal
+            var norman = Vector.norm(Vector.minus(pos, this.center));
+            return norman;
+        };
+
+        this.intersect = function(ray) {
+            var interm = Vector.minus(this.center, ray.start);
+            var a = Vector.dot(interm, ray.dir);
+            if (a > 0) {
+                var circ = this.diameter - (Vector.dot(interm, interm) - a * a);
+                if (circ >= 0) {
+                    var dist = a - Math.sqrt(circ);
+                }
+            }
+            if (dist == 0) {
+                return null;
+            } else {
+                return {
+                    dist: dist,
+                    ray: ray,
+                    thing: this
+                };
+            }
+        };
+    }
+    return Sphere;
+})();
+
+var Polygon = (function() {
+    function Polygon(norman, offset, surface) {
+        this.surface = surface;
+        this.normal = function(pos) {
+            return norman;
+        };
+        this.intersect = function(ray) {
+            var test1 = Vector.dot(norman, ray.dir);
+            if (test1 > 0) {
+                return null;
+            } else {
+                var dotted = Vector.dot(norman, ray.start);
+                var dist = (dotted + offset) / (-test1);
+                return {
+                    thing: this,
+                    dist: dist,
+                    ray: ray
+                };
+            }
+        };
+    }
+    return Polygon;
+})();
+
+//This algorithm is based on the ray tracer tutorial: https://www.youtube.com/watch?v=k_aRiYSXcyo
+
+var Triangle = (function() {
+    function Triangle(A, B, C, surface) {
+        this.surface = surface;
+        this.A = A;
+        this.B = B;
+        this.C = C;
+        var CA = new Vector(this.C.x - this.A.x, this.C.y - this.A.y, this.C.z - this.A.z);
+        var BA = new Vector(this.B.x - this.A.x, this.B.y - this.A.y, this.B.z - this.A.z);
+        this.normal = function(pos) {
+            var intern = Vector.cross(CA, BA);
+            return Vector.norm(intern);
+        };
+        this.intersect = function(ray) {
+            var CA = new Vector(this.C.x - this.A.x, this.C.y - this.A.y, this.C.z - this.A.z);
+            var BA = new Vector(this.B.x - this.A.x, this.B.y - this.A.y, this.B.z - this.A.z);
+            var inter = Vector.cross(CA, BA);
+            inter = Vector.norm(inter);
+            var a = Vector.dot(inter, ray.dir);
+            var dist = Vector.dot(inter, this.A);
+            if (a == 0) {
+                return null;
+            } else {
+                var timesy = Vector.multiply(dist, inter);
+                var negated = Vector.multiply(-1, timesy);
+                var temp = Vector.add(ray.start, negated);
+                var b = Vector.dot(inter, temp);
+                var dist2Plane = (-1) * (b / a);
+
+                var yo1 = dist2Plane * ray.dir.x;
+                var yo2 = dist2Plane * ray.dir.y;
+                var yo3 = dist2Plane * ray.dir.z;
+
+                var Qx = yo1 + ray.start.x;
+                var Qy = yo2 + ray.start.y;
+                var Qz = yo3 + ray.start.z;
+
+                var Q = new Vector(Qx, Qy, Qz);
+                var CA = new Vector(C.x - A.x, C.y - A.y, C.z - A.z);
+                var QA = new Vector(Q.x - A.x, Q.y - A.y, Q.z - A.z);
+                var test1 = Vector.cross(CA, QA);
+                test1 = Vector.dot(inter, test1);
+
+                var BC = new Vector(B.x - C.x, B.y - C.y, B.z - C.z);
+                var QC = new Vector(Q.x - C.x, Q.y - C.y, Q.z - C.z);
+                var test2 = Vector.cross(BC, QC);
+                test2 = Vector.dot(inter, test2);
+
+                var AB = new Vector(A.x - B.x, A.y - B.y, A.z - B.z);
+                var QB = new Vector(Q.x - B.x, Q.y - B.y, Q.z - B.z);
+                var test3 = Vector.cross(AB, QB);
+                test3 = Vector.dot(inter, test3);
+
+                if ((test1 >= 0) && (test2 >= 0) && (test3 >= 0)) {
+                    return {
+                        dist: dist,
+                        ray: ray,
+                        thing: this
+                    };
+                } else {
+                    var dist = -1 * (b / a);
+                    return null;
+                }
+            }
+        };
+    }
+    return Triangle;
+})();
+
+
+//Used for 2nd half of my cube
+var Triangle2 = (function() {
+    function Triangle2(A, B, C, surface) {
+        this.surface = surface;
+        this.A = A;
+        this.B = B;
+        this.C = C;
+        var CA = new Vector(this.C.x - this.A.x, this.C.y - this.A.y, this.C.z - this.A.z);
+        var BA = new Vector(this.B.x - this.A.x, this.B.y - this.A.y, this.B.z - this.A.z);
+        this.normal = function(pos) {
+            var intern = Vector.cross(CA, BA);
+            return Vector.norm(intern);
+        };
+        this.intersect = function(ray) {
+            var CA = new Vector(this.C.x - this.A.x, this.C.y - this.A.y, this.C.z - this.A.z);
+            var BA = new Vector(this.B.x - this.A.x, this.B.y - this.A.y, this.B.z - this.A.z);
+            var inter = Vector.cross(CA, BA);
+            inter = Vector.norm(inter);
+            var a = Vector.dot(inter, ray.dir);
+            var dist = Vector.dot(inter, this.A);
+            if (a === 0) {
+                return null;
+            } else {
+                var multiplyy = Vector.multiply(dist, inter);
+                var negmultiplyy = Vector.multiply(-1, multiplyy);
+                var temp = Vector.add(ray.start, negmultiplyy);
+                var b = Vector.dot(inter, temp);
+                var dist2Plane = (-1) * (b / a);
+
+                var yo1 = dist2Plane * ray.dir.x;
+                var yo2 = dist2Plane * ray.dir.y;
+                var yo3 = dist2Plane * ray.dir.z;
+
+                var Qx = yo1 + ray.start.x;
+                var Qy = yo2 + ray.start.y;
+                var Qz = yo3 + ray.start.z;
+
+                var Q = new Vector(Qx, Qy, Qz);
+                var CA = new Vector(C.x - A.x, C.y - A.y, C.z - A.z);
+                var QA = new Vector(Q.x - A.x, Q.y - A.y, Q.z - A.z);
+                var test1 = Vector.cross(CA, QA);
+                test1 = Vector.dot(inter, test1);
+
+                var BC = new Vector(B.x - C.x, B.y - C.y, B.z - C.z);
+                var QC = new Vector(Q.x - C.x, Q.y - C.y, Q.z - C.z);
+                var test2 = Vector.cross(BC, QC);
+                test2 = Vector.dot(inter, test2);
+
+                var AB = new Vector(A.x - B.x, A.y - B.y, A.z - B.z);
+                var QB = new Vector(Q.x - B.x, Q.y - B.y, Q.z - B.z);
+                var test3 = Vector.cross(AB, QB);
+                test3 = Vector.dot(inter, test3);
+
+                if ((test1 >= 0) && (test2 >= 0) && (test3 >= 0)) {
+                    return {
+                        dist: dist,
+                        ray: ray,
+                        thing: this
+                    };
+                } else {
+                    var dist = -1 * (b / a);
+                    return null;
+                }
+            }
+        };
+    }
+    return Triangle2;
+})();
+
+//My custom Color Class
+var Color = (function() {
+    function Color(r, g, b) {
+        this.r = r;
+        this.g = g;
+        this.b = b;
+    }
+    Color.white = new Color(1.0, 1.0, 1.0);
+    Color.grey = new Color(0.5, 0.5, 0.5);
+    Color.black = new Color(0.0, 0.0, 0.0);
+    Color.background = new Color(0, 0, 0.0);
+    Color.defaultColor = new Color(0.0, 0.0, 0.0);
+
+    Color.scale = function(c, v) {
+        return new Color(c * v.r, c * v.g, c * v.b);
+    };
+
+    Color.add = function(c1, c2) {
+        return new Color(c1.r + c2.r, c1.g + c2.g, c1.b + c2.b);
+    };
+
+    Color.multiply = function(c1, c2) {
+        return new Color(c1.r * c2.r, c1.g * c2.g, c1.b * c2.b);
+    };
+
+    Color.convertColor = function(c) {
+        return {
+            r: (c.r * 255) | 0,
+            g: (c.g * 255) | 0,
+            b: (c.b * 255) | 0
+        };
+    };
+
+    return Color;
+})();
+
+var Surface;
+(function(Surface) {
+    Surface.shiny = {
+        surfaceColor: function(pos) {
+            return new Color(0.7, 0.7, 0.7);
+        },
+        lightSpec: function(pos) {
+            return Color.grey;
+        },
+        reflection: function(pos) {
+            return 1.2;
+        },
+        shininess: 150
+    };
+    Surface.white = {
+        surfaceColor: function(pos) {
+            return new Color(0.1, 0.18725, 1.1745);
+        },
+        lightSpec: function(pos) {
+            return Color.black;
+        },
+        reflection: function(pos) {
+            return 0;
+        },
+        shininess: 150
+    };
+    Surface.middle = {
+        surfaceColor: function(pos) {
+            return new Color(0.1, 1.18725, 0.1745);
+        },
+        lightSpec: function(pos) {
+            return Color.black;
+        },
+        reflection: function(pos) {
+            return 0.5;
+        },
+        shininess: 1
+    };
+
+    Surface.head = {
+        surfaceColor: function(pos) {
+            return new Color(1.1, 0.18725, 0.1745);
+        },
+        lightSpec: function(pos) {
+            return Color.black;
+        },
+        reflection: function(pos) {
+            return 0;
+        },
+        shininess: 150
+    };
+
+    Surface.cubey = {
+        surfaceColor: function(pos) {
+            return new Color(0.329412, 0.223529, 0.027451);
+        },
+        lightSpec: function(pos) {
+            return new Color(0.329412, 0.223529, 0.027451);
+        },
+        reflection: function(pos) {
+            return 0.1;
+        },
+        shininess: 200
+    };
+    Surface.extrashiny = {
+        surfaceColor: function(pos) {
+            return Color.white;
+        },
+        lightSpec: function(pos) {
+            return Color.black;
+        },
+        reflection: function(pos) {
+            return 1.1;
+        },
+        shininess: 1
+    };
+    Surface.checkerboard = {
+        surfaceColor: function(pos) {
+            if ((Math.floor(pos.z) + Math.floor(pos.x)) % 2 !== 0) {
+                return Color.white;
+            } else {
+                return Color.black;
+            }
+        },
+        lightSpec: function(pos) {
+            return Color.white;
+        },
+        reflection: function(pos) {
+            if ((Math.floor(pos.z) + Math.floor(pos.x)) % 2 !== 0) {
+                return 0.1;
+            } else {
+                return 0.7;
+            }
+        },
+        shininess: 150
+    };
+})(Surface || (Surface = {}));
+
+//My custom Vector class
+var Vector = (function() {
+    function Vector(x, y, z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+
+    //Vector multiplication
+    Vector.multiply = function(a, b) {
+        return new Vector(a * b.x, a * b.y, a * b.z);
+    };
+
+    //Vector subtraction
+    Vector.minus = function(a, b) {
+        return new Vector(a.x - b.x, a.y - b.y, a.z - b.z);
+    };
+
+    //Vector addition
+    Vector.add = function(a, b) {
+        return new Vector(a.x + b.x, a.y + b.y, a.z + b.z);
+    };
+
+    //The dot product
+    Vector.dot = function(a, b) {
+        return a.x * b.x + a.y * b.y + a.z * b.z;
+    };
+
+    //The Magnitude
+    Vector.mag = function(b) {
+        return Math.sqrt(b.x * b.x + b.y * b.y + b.z * b.z);
+    };
+
+    //The normal
+    Vector.norm = function(a) {
+        var mag = Vector.mag(a);
+        var div;
+        if (mag == 0) {
+            div = Infinity;
+        } else {
+            div = 1.0 / mag;
+        }
+        return Vector.multiply(div, a);
+    };
+
+    //The cross product
+    Vector.cross = function(a, b) {
+        return new Vector(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x);
+    };
+
+    return Vector;
+})();
+
+var RayTracer = (function() {
+    function RayTracer() {}
+    RayTracer.prototype.intersections = function(ray, scene) {
+        var closest = Infinity;
+        var closestIntersection = null;
+        //Run through the shapes in the scene
+        for (var i in scene.shapes) {
+            var inter = scene.shapes[i].intersect(ray);
+            if (inter != null && inter.dist < closest) {
+                closest = inter.dist;
+                closestIntersection = inter;
+            }
+        }
+        return closestIntersection;
+    };
+
+    RayTracer.prototype.isRay = function(ray, scene) {
+        var intersections = this.intersections(ray, scene);
+        if (intersections == null) {
+            return null;
+        } else {
+            return intersections.dist;
+        }
+    };
+
+    RayTracer.prototype.trace = function(ray, scene, depth) {
+        var intersections = this.intersections(ray, scene);
+        if (intersections != null) {
+            var direction = intersections.ray.dir;
+            var multed = Vector.multiply(intersections.dist, direction);
+            var pos = Vector.add(multed, intersections.ray.start);
+            var normal = intersections.thing.normal(pos);
+            var dottedMult = Vector.multiply(Vector.dot(normal, direction), normal);
+            var reflection = Vector.minus(direction, Vector.multiply(2, dottedMult));
+            var withouShade = Color.add(Color.background, this.setColor(intersections.thing, pos, normal, reflection, scene));
+            //Check whether it is a shadow.
+            //If not recurse
+            var reflectedColor = (depth >= this.maxDepth) ? Color.grey : this.getReflectionColor(intersections.thing, pos, normal, reflection, scene, depth);
+            return Color.add(withouShade, reflectedColor);
+        } else {
+            //Rays leaving are blue
+            return new Color(0.0, 0.0, 0.7);
+        }
+    };
+
+
+    RayTracer.prototype.getReflectionColor = function(thing, pos, normal, direction, scene, depth) {
+        return Color.scale(thing.surface.reflection(pos), this.trace({
+            start: pos,
+            dir: direction
+        }, scene, depth));
+    };
+
+    RayTracer.prototype.setColor = function(thing, pos, norm, direction, scene) {
+        var obj = this;
+        var addLight = function(color, light) {
+            var lightDis = Vector.minus(light.pos, pos);
+            var normalDir = Vector.norm(lightDis);
+            var intersect = obj.isRay({
+                start: pos,
+                dir: normalDir
+            }, scene);
+            if (intersect != null) {
+                isInShadow = intersect <= Vector.mag(lightDis);
+            } else {
+                isInShadow = false;
+            }
+            if (isInShadow) {
+                return color;
+            } else {
+                var illum = Vector.dot(normalDir, norm);
+                if (illum < 0) {
+                    lcolor = Color.defaultColor;
+                } else {
+                    lcolor = Color.scale(illum, light.color);
+                }
+                var specular = Vector.dot(normalDir, Vector.norm(direction));
+
+                if (specular < 0) {
+                    scolor = Color.defaultColor;
+                } else {
+                    scolor = Color.scale(Math.pow(specular, thing.surface.shininess), light.color);
+                }
+                var specMult = Color.multiply(thing.surface.lightSpec(pos), scolor);
+                var diffMult = Color.multiply(thing.surface.surfaceColor(pos), lcolor);
+                var colorAdd = Color.add(diffMult, specMult);
+                return Color.add(color, colorAdd);
+            }
+        };
+        return scene.light.reduce(addLight, Color.defaultColor);
+    };
+
+
+
+    RayTracer.prototype.render = function(scene, ctx) {
+        var findPoint = function(x, y, camera) {
+            var xPoint = function(x) {
+                return (x - (512 / 2.0)) / 2.0 / 512;
+            };
+            var yPoint = function(y) {
+                return -(y - (512 / 2.0)) / 2.0 / 512;
+            };
+            var camDir = Vector.add(camera.forwadirection, Vector.add(Vector.multiply(xPoint(x), camera.right), Vector.multiply(yPoint(y), camera.up)));
+            return Vector.norm(camDir);
+        };
+        var imageData = ctx.getImageData(0, 0, 512, 512);
+        var counter = 0;
+        for (var y = 0; y < 512; y++) {
+            for (var x = 0; x < 512; x++) {
+                var color = this.trace({
+                    start: scene.camera.pos,
+                    dir: findPoint(x, y, scene.camera)
+                }, scene, 0);
+                var c = Color.convertColor(color);
+                imageData.data[counter++] = c.r;
+                imageData.data[counter++] = c.g;
+                imageData.data[counter++] = c.b;
+                imageData.data[counter++] = 255;
+            }
+        }
+
+        ctx.putImageData(imageData, 0, 0);
+    };
+    return RayTracer;
+})();
+
+
+render();
+</script>
